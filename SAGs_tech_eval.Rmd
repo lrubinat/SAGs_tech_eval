@@ -1,0 +1,310 @@
+---
+title: "SAGs_tech_eval"
+author: "lrubinat"
+date: "3/17/2017"
+output:  
+  html_document:
+    theme: united
+    toc: yes
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+<!--- INITIALIZATION
+```{r, echo=FALSE}
+#error hook to kill knitr in case of errors
+library(knitr)
+knit_hooks$set(error = function(x, options) stop(x))
+opts_chunk$set(cache=TRUE, autodep=TRUE)
+```
+--->
+
+
+```{r libraries, echo=T, message=F}
+library(data.table)
+library(dplyr)
+library(DT)
+library(magrittr)
+#library(plyr)
+#library(reshape2)
+library(seqinr)
+#library(shiny)
+library(pheatmap)
+library(ggplot2)
+library(stats)
+library(gtools)
+```
+
+
+
+
+```{r read_V9_from_SAGs, echo=F, message=F, results="hide"}
+setwd("~/Documents/2Q16/analyses/exploratory_figures_v2/SAGs_tech_eval/")
+
+primer1<-"TTGTACACACCGCCC"
+
+#read FASTA files (Genoscope, ICM and Blanes SAGs) and transform them into data.frames
+SAG_18S_GEN<-read.fasta("input/SAGs_18S_Genoscope.fasta")
+length(SAG_18S_GEN) #903
+SAG_18S_GEN<-data.table(IDs=names(SAG_18S_GEN), sequences=unlist(getSequence(SAG_18S_GEN, as.string=T)))
+SAG_18S_GEN$sequences<-toupper(SAG_18S_GEN$sequences)
+SAG_18S_GEN[,dataset:="Genoscope"]
+
+SAG_18S_ICM<-read.fasta("input/TARA_078_SAG_plate_18S_euk.fasta")
+length(SAG_18S_ICM) #40
+SAG_18S_ICM<-data.table(IDs=names(SAG_18S_ICM), sequences=unlist(getSequence(SAG_18S_ICM, as.string=T)))
+SAG_18S_ICM$sequences<-toupper(SAG_18S_ICM$sequences)
+SAG_18S_ICM[,dataset:="ICM"]
+
+
+SAG_18S_BLA<-read.fasta("input/Sags_Dec2016_cleanIDs.fasta")
+length(SAG_18S_BLA) #169
+SAG_18S_BLA<-data.table(IDs=names(SAG_18S_BLA), sequences=unlist(getSequence(SAG_18S_BLA, as.string=T)))
+SAG_18S_BLA$sequences<-toupper(SAG_18S_BLA$sequences)
+SAG_18S_BLA[,dataset:="Blanes"]
+
+SAG_18S_all<-rbind(SAG_18S_GEN,SAG_18S_ICM,SAG_18S_BLA)
+
+SAG_V9_all<-SAG_18S_all
+SAG_V9_all[,V9:=grepl(primer1,sequences)]
+SAG_V9_all<-SAG_V9_all[V9==T]
+SAG_V9_all[,sequences:=sub(paste("^.+",primer1,sep=""),"",sequences)]
+SAG_V9_all[,V9:=NULL]
+nrow(SAG_V9_all) #1062 SAGs (868 GEN; 31 ICM; 163 BLA)
+head(SAG_V9_all)
+
+#add MMETSP V9
+MMETSP_V9<-read.fasta("input/MMETSP_v9_unieuk5decembre2016_standard.fasta")
+length(MMETSP_V9) #537
+MMETSP_V9<-data.table(IDs=names(MMETSP_V9), sequences=unlist(getSequence(MMETSP_V9, as.string=T)))
+MMETSP_V9$sequences<-toupper(MMETSP_V9$sequences)
+MMETSP_V9[,dataset:="MMETSP"]
+
+SAG_V9_all<-rbind(SAG_V9_all,MMETSP_V9)
+nrow(SAG_V9_all) #1599
+
+write.fasta(sequences=as.list(SAG_V9_all$sequences), names=SAG_V9_all$IDs, file.out="./input/SAGs_V9_all.fasta")
+```
+
+
+A total amount of 1062 SAGs (GEN: 868 out of 903; ICM: 31 out of 40; BLA: 163 out of 169) contain the sequence of the forward primer 1389F for the V9 region (5'- TTGTACACACCGCCC -3'). None of the 1062 SAGs contains the complete sequence of the reverse primer 1510R (5'- CCTTCYGCAGGTTCACCTAC -3') - most of the 18S rDNA SAGs miss the last ~5 bp of the V9 region.
+
+We blasted the V9 sequences of SAGs and MMETSPs on Tara swarms and we selected the hits showing a coverage >80% and a similarity =100%.
+
+```{r blast_SAGs-V9_on_swarms, echo=F, message=F, results="hide"}
+
+SAGs_BLAST_out_id95<-fread("input/SAGs_swarms_BLAST_id95.noreplicates.txt") #1531
+row.names(SAGs_BLAST_out_id95)<-SAGs_BLAST_out_id95$SAG_id
+SAGs_BLAST_out_id95[,subj_cov:=(V5*100/V6)]
+
+#filter by subject coverage (remove short query sequences or alignments with short overlaping regions)
+SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[subj_cov>80] #1303
+
+#filter by query coverage (remove short subject sequences)
+SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[V7>80] #1295
+SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[,list(V1,V2,V3,V5,V6,V7,subj_cov)]
+setnames(SAGs_BLAST_out_id95,c("SAG_id","md5sum","identity","SAG_length","swarm_length","query_cov","subj_cov"))
+
+SAGs_BLAST_out_id100<-SAGs_BLAST_out_id95[identity==100]
+row.names(SAGs_BLAST_out_id100)<-SAGs_BLAST_out_id100$SAG_id
+
+SAGs_BLAST_out_id97<-SAGs_BLAST_out_id95[identity>=97]
+row.names(SAGs_BLAST_out_id197)<-SAGs_BLAST_out_id197$SAG_id
+
+dim(SAGs_BLAST_out_id100)
+dim(SAGs_BLAST_out_id97)
+dim(SAGs_BLAST_out_id95)
+```
+
+```{r compare_datasets, echo=F}
+row.names(SAGs_BLAST_out_id100)
+
+barplot_tb<-data.table()
+
+#Genoscope SAGs
+barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
+                                         ident="all_V9",
+                                         value=length(grep("MMETSP|AG-|AD-", SAG_V9_all$IDs, invert = T))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
+                                         ident="ident_95",
+                                         value=length(grep("MMETSP|AG-|AD-", row.names(SAGs_BLAST_out_id95), invert = T))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
+                                         ident="ident_97",
+                                         value=length(grep("MMETSP|AG-|AD-",row.names(SAGs_BLAST_out_id97), invert = T))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
+                                         ident="ident_100",
+                                         value=length(grep("MMETSP|AG-|AD-",row.names(SAGs_BLAST_out_id100), invert = T))))
+
+
+
+#MMETSP sequences
+barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
+                                         ident="all_V9",
+                                         value=length(grep("MMETSP", SAG_V9_all$IDs))))
+barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
+                                         ident="ident_95",
+                                         value=length(grep("MMETSP", row.names(SAGs_BLAST_out_id95)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
+                                         ident="ident_97",
+                                         value=length(grep("MMETSP",row.names(SAGs_BLAST_out_id97)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
+                                         ident="ident_100",
+                                         value=length(grep("MMETSP",row.names(SAGs_BLAST_out_id100)))))
+
+
+
+#Blanes SAGs
+barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
+                                         ident="all_V9",
+                                         value=length(grep("AG-", SAG_V9_all$IDs))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
+                                         ident="ident_95",
+                                         value=length(grep("AG-", row.names(SAGs_BLAST_out_id95)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
+                                         ident="ident_97",
+                                         value=length(grep("AG-",row.names(SAGs_BLAST_out_id97)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
+                                         ident="ident_100",
+                                         value=length(grep("AG-",row.names(SAGs_BLAST_out_id100)))))
+
+
+
+#ICM SAGs
+barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
+                                         ident="all_V9",
+                                         value=length(grep("AD-", SAG_V9_all$IDs))))
+barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
+                                         ident="ident_95",
+                                         value=length(grep("AD-", row.names(SAGs_BLAST_out_id95)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
+                                         ident="ident_97",
+                                         value=length(grep("AD-",row.names(SAGs_BLAST_out_id97)))))
+barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
+                                         ident="ident_100",
+                                         value=length(grep("AD-",row.names(SAGs_BLAST_out_id100)))))
+
+
+```
+
+```{r samples_selection, echo=F}
+#global occurrence of swarms in Tara Oceans, BioMarKs and Tara Arctic.
+#data<-fread("input/globaldataset.otu.v20160830")
+#head(data)
+
+#selection of Tara samples.
+#sple<-fread("input/sple.csv")
+#sple<-sple[fraction%in%c("0.8-5","5-20")&template=="DNA"]
+
+#data_abund<-data[,.SD,.SDcols=c("md5sum",sple$sample)]
+#data_abund<-melt(data_abund,id.vars="md5sum")
+#data_abund<-data_abund[value>0]
+
+#setkey(data_abund,variable)
+#setkey(sple,sample)
+#data_abund<-sple[data_abund]
+
+#write.table(data_abund, "data_abund_tb_piconano_nano.txt", sep="\t",row.names=F)
+```
+
+
+########################################
+
+```{r samples_selection, echo=F, message=FALSE, warning=FALSE}
+#global occurrence of swarms in Tara Oceans, BioMarKs and Tara Arctic.
+data<-fread("~/Documents/2Q16/data/TARA_V9/globaldataset.otu.v20160830")
+head(data)
+
+#selection of Tara samples.
+sple<-fread("./input/sple.csv")
+sple<-sple[fraction%in%c("0.8-5")&template=="DNA"]
+sple[,sple_no:=(paste("st",sple$station, sep="_"))]
+sple[,sple_id:=(paste(sple$sple_no,sple$sample,sple$depth, sep="-"))]
+
+data_abund<-data[,.SD,.SDcols=c("md5sum",sple$sample)]
+data_abund<-melt(data_abund,id.vars="md5sum")
+data_abund<-data_abund[value>0]
+
+setkey(data_abund,variable)
+setkey(sple,sample)
+data_abund<-sple[data_abund]
+
+write.table(data_abund, "data_abund_tb_piconano.txt", sep="\t",row.names=F)
+```
+
+
+########################################
+
+
+```{r abund_table, echo=F, message=F, warning=FALSE}
+#list of SAGs_IDs and corresponding md5sum
+SAGs_BLAST_out_id95
+SAGs_BLAST_out_id97
+SAGs_BLAST_out_id100
+
+#md5sum abundance per station
+data_abund2<-data[,.SD,.SDcols=c("md5sum",sple$sample)]
+
+#swarm total abundance per station
+stations_abund<-data[,.SD,.SDcols=c("md5sum",sple$sample)]
+stations_abund<-colSums(stations_abund[,2:171]) #2:262 in case of piconano+nano size fractions
+write.table(stations_abund,"stations_abund.txt",row.names=F,sep="\t")
+
+#compute the relative abundance of each SAG/MMETSP in each station
+rel_abund<-cbind(data_abund2,round(data_abund2[,-1]/stations_abund,15))
+rel_abund<-rel_abund[,-c(2:171)]
+#add column with total md5sum relative abundance {used for sorting!}
+rel_abund[,total_rel_abund:=rowSums(rel_abund[,2:171])]
+
+#add column with total md5sum abundance {used for sorting!}
+#rel_abund[,total_abund:=rowSums(data_abund2[,2:262])]
+
+abund_per_SAG_id95<-merge(SAGs_BLAST_out_id95, rel_abund, by.x="md5sum", by.y="md5sum", all.x=TRUE)
+abund_per_SAG_id95<-abund_per_SAG_id95[total_rel_abund>0]
+
+abund_per_SAG_id95<-merge(abund_per_SAG_id95, SAG_V9_all, by.x="SAG_id", by.y="IDs", all.x=TRUE)
+abund_per_SAG_id95<-abund_per_SAG_id95[order(subj_cov,decreasing = T)]
+abund_per_SAG_id95<-abund_per_SAG_id95[order(total_rel_abund,decreasing = T)]
+
+swarms_taxog<-read.table(file="./input/swarms_taxogroups.txt", head=TRUE, sep="\t")
+abund_per_SAG_id95<-merge(abund_per_SAG_id95, swarms_taxog, by.x="md5sum", by.y="md5sum", all.x=TRUE)
+
+taxo_classif<-read.table(file="./input/SAGs_annotation/all_classif_noSpChar.txt", head=TRUE, sep="\t")
+abund_per_SAG_id95<-merge(abund_per_SAG_id95, taxo_classif, by.x="SAG_id", by.y="SAG_ID", all.x=TRUE)
+
+sag_infos = read.table("input/include_genome_completion_info/SAGs_genome_compl_info.txt", sep="\t", header=T)
+abund_per_SAG_id95 = merge(abund_per_SAG_id95, sag_infos, by.x="SAG_id", by.y="ID", all.x=TRUE)
+
+row.names(abund_per_SAG_id95)<-paste(abund_per_SAG_id95$SAG_id,abund_per_SAG_id95$taxogroup,abund_per_SAG_id95$md5sum,abund_per_SAG_id95$classif, sep="-")
+
+mixotrophic_IDs<-c("Chlorara|Chrysoph|Dictyoch|Dinoph|Prymnesio")
+green_algae_IDs<-c("Chloroph|Ulvoph|Trebouxiop|Prasinoph|Mamielloph|Pyramimona|Streptoph")
+red_algae_IDs<-c("Rhodoph")
+
+abund_per_SAG_id95<-data.table(abund_per_SAG_id95)
+row.names(abund_per_SAG_id95)<-paste(abund_per_SAG_id95$SAG_id,abund_per_SAG_id95$taxogroup,abund_per_SAG_id95$md5sum,abund_per_SAG_id95$classif, sep="-")
+abund_per_SAG_id95[,mixotrophs:=grepl(mixotrophic_IDs,row.names(abund_per_SAG_id95))]
+abund_per_SAG_id95[,green_algae:=grepl(green_algae_IDs,row.names(abund_per_SAG_id95))]
+abund_per_SAG_id95[,red_algae:=grepl(red_algae_IDs,row.names(abund_per_SAG_id95))]
+
+write.table(abund_per_SAG_id95,"abund_per_SAG_id95.txt",row.names=F,sep="\t")
+```
+
+
+otus_vs_samples_plot_protists_plus_bacteria<-ggplot(tb16S_protists_plus_bacteria_OTUs_reads_samples_non.norm_rel_abund, 
+  aes(OTUs_per_class, 
+  reads_per_class, 
+  label = rownames(tb16S_protists_plus_bacteria_OTUs_reads_samples_non.norm_rel_abund)))
+
+otus_vs_samples_plot_protists_plus_bacteria + geom_point() + 
+  geom_text(check_overlap = TRUE,hjust = -0.05, nudge_x = 0.05, size=3) + 
+  scale_x_continuous(limits = c(0, 40)) + 
+  labs(title="[18] Reads per class vs. OTUs per class", x="OTUs (%)", y="reads (%)") + 
+  coord_trans(y = "log10") 
+
+
+
+
+
+
+
