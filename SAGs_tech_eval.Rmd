@@ -93,9 +93,8 @@ A total amount of 1062 SAGs (GEN: 868 out of 903; ICM: 31 out of 40; BLA: 163 ou
 We blasted the V9 sequences of SAGs and MMETSPs on Tara swarms and we selected the hits showing a coverage >80% and a similarity =100%.
 
 ```{r blast_SAGs-V9_on_swarms, echo=F, message=F, results="hide"}
-
 SAGs_BLAST_out_id95<-fread("input/SAGs_swarms_BLAST_id95.noreplicates.txt") #1531
-row.names(SAGs_BLAST_out_id95)<-SAGs_BLAST_out_id95$SAG_id
+
 SAGs_BLAST_out_id95[,subj_cov:=(V5*100/V6)]
 
 #filter by subject coverage (remove short query sequences or alignments with short overlaping regions)
@@ -105,12 +104,13 @@ SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[subj_cov>80] #1303
 SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[V7>80] #1295
 SAGs_BLAST_out_id95<-SAGs_BLAST_out_id95[,list(V1,V2,V3,V5,V6,V7,subj_cov)]
 setnames(SAGs_BLAST_out_id95,c("SAG_id","md5sum","identity","SAG_length","swarm_length","query_cov","subj_cov"))
+row.names(SAGs_BLAST_out_id95)<-SAGs_BLAST_out_id95$SAG_id
 
 SAGs_BLAST_out_id100<-SAGs_BLAST_out_id95[identity==100]
 row.names(SAGs_BLAST_out_id100)<-SAGs_BLAST_out_id100$SAG_id
 
 SAGs_BLAST_out_id97<-SAGs_BLAST_out_id95[identity>=97]
-row.names(SAGs_BLAST_out_id197)<-SAGs_BLAST_out_id197$SAG_id
+row.names(SAGs_BLAST_out_id97)<-SAGs_BLAST_out_id97$SAG_id
 
 dim(SAGs_BLAST_out_id100)
 dim(SAGs_BLAST_out_id97)
@@ -124,66 +124,73 @@ barplot_tb<-data.table()
 
 #Genoscope SAGs
 barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
-                                         ident="all_V9",
+                                         ident="A_all_V9",
                                          value=length(grep("MMETSP|AG-|AD-", SAG_V9_all$IDs, invert = T))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
-                                         ident="ident_95",
+                                         ident="B_ident_95",
                                          value=length(grep("MMETSP|AG-|AD-", row.names(SAGs_BLAST_out_id95), invert = T))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
-                                         ident="ident_97",
+                                         ident="C_ident_97",
                                          value=length(grep("MMETSP|AG-|AD-",row.names(SAGs_BLAST_out_id97), invert = T))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Genoscope",
-                                         ident="ident_100",
+                                         ident="D_ident_100",
                                          value=length(grep("MMETSP|AG-|AD-",row.names(SAGs_BLAST_out_id100), invert = T))))
-
 
 
 #MMETSP sequences
 barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
-                                         ident="all_V9",
-                                         value=length(grep("MMETSP", SAG_V9_all$IDs))))
+                                         ident="A_all_V9",
+                                         value=length(grep("MMETSP",SAG_V9_all$IDs))))
 barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
-                                         ident="ident_95",
-                                         value=length(grep("MMETSP", row.names(SAGs_BLAST_out_id95)))))
+                                         ident="B_ident_95",
+                                         value=length(grep("MMETSP",row.names(SAGs_BLAST_out_id95)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
-                                         ident="ident_97",
+                                         ident="C_ident_97",
                                          value=length(grep("MMETSP",row.names(SAGs_BLAST_out_id97)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="MMETSP",
-                                         ident="ident_100",
+                                         ident="D_ident_100",
                                          value=length(grep("MMETSP",row.names(SAGs_BLAST_out_id100)))))
 
 
 
 #Blanes SAGs
 barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
-                                         ident="all_V9",
+                                         ident="A_all_V9",
                                          value=length(grep("AG-", SAG_V9_all$IDs))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
-                                         ident="ident_95",
+                                         ident="B_ident_95",
                                          value=length(grep("AG-", row.names(SAGs_BLAST_out_id95)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
-                                         ident="ident_97",
+                                         ident="C_ident_97",
                                          value=length(grep("AG-",row.names(SAGs_BLAST_out_id97)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="Blanes",
-                                         ident="ident_100",
+                                         ident="D_ident_100",
                                          value=length(grep("AG-",row.names(SAGs_BLAST_out_id100)))))
 
 
 
 #ICM SAGs
 barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
-                                         ident="all_V9",
+                                         ident="A_all_V9",
                                          value=length(grep("AD-", SAG_V9_all$IDs))))
 barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
-                                         ident="ident_95",
+                                         ident="B_ident_95",
                                          value=length(grep("AD-", row.names(SAGs_BLAST_out_id95)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
-                                         ident="ident_97",
+                                         ident="C_ident_97",
                                          value=length(grep("AD-",row.names(SAGs_BLAST_out_id97)))))
 barplot_tb<-rbind(barplot_tb, data.table(group="ICM",
-                                         ident="ident_100",
+                                         ident="D_ident_100",
                                          value=length(grep("AD-",row.names(SAGs_BLAST_out_id100)))))
 
+
+ggplot(barplot_tb,aes(x=group,y=value,fill=factor(ident))) +
+  geom_bar(stat="identity",position="dodge") +
+  scale_fill_viridis(discrete = TRUE, labels = c("sequences containing V9 region", "seq. matching swarms at 95% id.",  "seq. matching swarms at 97% id.", "seq. matching swarms at 100% id."))+
+  theme(legend.title = element_blank()) +
+  xlab("Data set")+ylab("Number of sequences") + 
+  scale_x_discrete(limits=c("Genoscope","MMETSP","Blanes","ICM"))+
+  geom_text(aes(label=value), vjust=-.75, colour="black", position=position_dodge(0.9), size=3)
 
 ```
 
